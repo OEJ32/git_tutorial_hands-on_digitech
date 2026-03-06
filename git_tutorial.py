@@ -50,7 +50,7 @@ def _imports(os):
         out = git(cmd, cwd=cwd)
         return mo.md(f"```\n$ {cmd}\n{out}\n```")
 
-    return REPO, git, mo, show
+    return Path, REPO, git, mo, show
 
 
 @app.cell
@@ -66,12 +66,19 @@ def _(show):
 
 
 @app.cell
-def _(os, show):
+def _(Path, os):
     from dotenv import load_dotenv
-    load_dotenv()
+
+    # Fuerza a buscar en la carpeta donde está tu notebook
+    # Si tu notebook está en la raíz, esto buscará el .env allí
+    dotenv_path = Path('.env') 
+    load_dotenv(dotenv_path=dotenv_path)
+
     GH_USERNAME = os.getenv("GH_USERNAME")
     REPO_NAME ='teaching_git'
-    show(cmd='git remote -v')
+
+    print(f"DEBUG: Buscando .env en {dotenv_path.absolute()}")
+    print(f"DEBUG: Valor encontrado: {GH_USERNAME}")
     return GH_USERNAME, REPO_NAME
 
 
@@ -100,39 +107,6 @@ def _(GH_USERNAME, REPO_NAME, git, show):
 def _(show):
     # Finalmente, confirmamos el estado final
     show(cmd="git remote -v")
-    return
-
-
-@app.cell
-def _(git):
-    def create_remote_repo(GH_USERNAME, show):
-        # Verificamos si existe el remote antes de intentar crearlo
-        check_remote = git("git remote")
-        if "origin" not in check_remote:
-            # Solo creamos si no existe
-            show(cmd=f"gh repo create git_tutorial_1 --private --source=. --push")
-        else:
-            print("El repositorio remoto ya está configurado.")
-        return
-
-    return
-
-
-@app.cell
-def _(GH_USERNAME, show):
-    show(cmd=f'git remote set-url origin https://github.com/{GH_USERNAME}/git_test.git')
-    return
-
-
-@app.cell
-def _(show):
-    show(cmd='git remote -v')
-    return
-
-
-@app.cell
-def _(GH_USERNAME, show):
-    show(cmd=f"git remote add origin https://github.com/{GH_USERNAME}/git_test.git")
     return
 
 
