@@ -2,6 +2,7 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "marimo>=0.20.2",
+#     "python-dotenv>=1.2.2",
 #     "pyzmq>=27.1.0",
 # ]
 # ///
@@ -16,7 +17,9 @@ app = marimo.App(width="medium", app_title="Git & GitHub — Tutorial CLI")
 def _():
     import os
     # In ipynb, simply <<!uv init>>. No magic commands here
-    os.system("uv init")
+    # os.system("uv init")
+    # os.system("uv venv .venv")
+    # os.system("source .venv\Scripts\activate")  # En Linux/Mac: source .venv/bin/activate
     return (os,)
 
 
@@ -25,7 +28,6 @@ def _imports(os):
     import marimo as mo
     import subprocess, tempfile
     from pathlib import Path
-
 
     REPO: Path = Path()
 
@@ -49,6 +51,89 @@ def _imports(os):
         return mo.md(f"```\n$ {cmd}\n{out}\n```")
 
     return REPO, git, mo, show
+
+
+@app.cell
+def _(show):
+    show(cmd="git init")
+    return
+
+
+@app.cell
+def _(show):
+    show(cmd='uv add python-dotenv')
+    return
+
+
+@app.cell
+def _(os, show):
+    from dotenv import load_dotenv
+    load_dotenv()
+    GH_USERNAME = os.getenv("GH_USERNAME")
+    REPO_NAME ='teaching_git'
+    show(cmd='git remote -v')
+    return GH_USERNAME, REPO_NAME
+
+
+@app.cell
+def _(GH_USERNAME, REPO_NAME, git, show):
+    def create_remote_repo(GH_USERNAME, show):
+        # Verificamos si 'origin' ya existe en la configuración de remotos
+        check_remote = git("git remote")
+    
+        if "origin" not in check_remote:
+            # Si no existe, lo añadimos por primera vez
+            show(cmd=f"git remote add origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
+            print("Configurado 'origin' por primera vez.")
+        else:
+            # Si ya existe, simplemente actualizamos la URL (por si cambió)
+            show(cmd=f"git remote set-url origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
+            print("'origin' ya existía, URL actualizada correctamente.")
+    
+        return
+
+    create_remote_repo(GH_USERNAME, show)
+    return
+
+
+@app.cell
+def _(show):
+    # Finalmente, confirmamos el estado final
+    show(cmd="git remote -v")
+    return
+
+
+@app.cell
+def _(git):
+    def create_remote_repo(GH_USERNAME, show):
+        # Verificamos si existe el remote antes de intentar crearlo
+        check_remote = git("git remote")
+        if "origin" not in check_remote:
+            # Solo creamos si no existe
+            show(cmd=f"gh repo create git_tutorial_1 --private --source=. --push")
+        else:
+            print("El repositorio remoto ya está configurado.")
+        return
+
+    return
+
+
+@app.cell
+def _(GH_USERNAME, show):
+    show(cmd=f'git remote set-url origin https://github.com/{GH_USERNAME}/git_test.git')
+    return
+
+
+@app.cell
+def _(show):
+    show(cmd='git remote -v')
+    return
+
+
+@app.cell
+def _(GH_USERNAME, show):
+    show(cmd=f"git remote add origin https://github.com/{GH_USERNAME}/git_test.git")
+    return
 
 
 @app.cell
@@ -400,7 +485,7 @@ def _(mo):
         LocalBranch -- "git add" --> StagingArea
         StagingArea -- "git commit" --> LocalBranch
         LocalBranch -. "git push" .-> RemoteFeature
-    
+
         %% Relación de remotes
         Remotes[Remotes: Lista de servidores] --> origin
     """)
@@ -688,28 +773,6 @@ def _(REPO: "Path", show):
 @app.cell
 def _(show):
     show("git push origin feature/add-docs")
-    return
-
-
-@app.cell
-def _(show):
-    show("gh auth login")
-    return
-
-
-@app.cell
-def _(show):
-    show("gh repo create git_tutorial_1")
-    return
-
-
-@app.cell
-def _(os, show):
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    GH_USERNAME = os.getenv("GH_USERNAME")
-    show(cmd=f"git remote add origin https://github.com/{GH_USERNAME}/git_test.git")
     return
 
 
