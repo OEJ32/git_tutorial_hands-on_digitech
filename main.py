@@ -1,6 +1,7 @@
-def main():
+from fastapi import FastAPI
 
-    print("Hello from git-tutorial for Digitech!")
+app = FastAPI()
 
-if __name__ == "__main__":
-	    main()
+@app.get('/')
+def root():
+    return {'message': 'Hola mundo!'}
