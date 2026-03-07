@@ -65,7 +65,6 @@ GH_USERNAME=tu_usuario_de_github
 uv sync 
 uv venv .venv
 .venv\Scripts\activate
-uv add marimo python-dotenv pyzmq
 ```
 
 ---
