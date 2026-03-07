@@ -14,22 +14,38 @@ app = marimo.App(width="medium", app_title="Git & GitHub — Tutorial CLI")
 
 
 @app.cell
-def _():
+def _imports():
     import os
-    # In ipynb, simply <<!uv init>>. No magic commands here
-    # os.system("uv init")
-    # os.system("uv venv .venv")
-    # os.system("source .venv\Scripts\activate")  # En Linux/Mac: source .venv/bin/activate
-    return (os,)
-
-
-@app.cell
-def _imports(os):
     import marimo as mo
-    import subprocess, tempfile
+    import subprocess
+    import shutil
     from pathlib import Path
 
-    REPO: Path = Path()
+    # ── Sandbox aislado ────────────────────────────────────────────────────────
+    # El tutorial siempre trabaja en una subcarpeta limpia llamada 'sandbox/'
+    # dentro del directorio del notebook, NUNCA en el repo padre.
+    # Si ya existe de una ejecución anterior, la borramos para empezar desde cero.
+    _notebook_dir = Path(__file__).parent.resolve()
+    REPO: Path = _notebook_dir / "sandbox"
+
+    def _force_rmtree(path):
+        """shutil.rmtree seguro en Windows: los ficheros .git son read-only."""
+        import stat
+        def _on_error(func, p, exc):
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        shutil.rmtree(path, onexc=_on_error)
+
+    if REPO.exists():
+        _force_rmtree(REPO)
+    REPO.mkdir(parents=True)
+
+    # También limpiamos los artefactos del "compañero B" de ejecuciones anteriores
+    for _leftover in ["origin.git", "alumno-b"]:
+        _p = _notebook_dir / _leftover
+        if _p.exists():
+            _force_rmtree(_p)
+    # ──────────────────────────────────────────────────────────────────────────
 
     def git(cmd, cwd=None):
         env = os.environ.copy()
@@ -46,68 +62,11 @@ def _imports(os):
         return out
 
     def show(cmd, cwd=None):
-        """Run a command and return a markdown code block with the output."""
+        """Run a git/shell command and return a marimo markdown code block."""
         out = git(cmd, cwd=cwd)
         return mo.md(f"```\n$ {cmd}\n{out}\n```")
 
-    return Path, REPO, git, mo, show
-
-
-@app.cell
-def _(show):
-    show(cmd="git init")
-    return
-
-
-@app.cell
-def _(show):
-    show(cmd='uv add python-dotenv')
-    return
-
-
-@app.cell
-def _(Path, os):
-    from dotenv import load_dotenv
-
-    # Fuerza a buscar en la carpeta donde está tu notebook
-    # Si tu notebook está en la raíz, esto buscará el .env allí
-    dotenv_path = Path('.env') 
-    load_dotenv(dotenv_path=dotenv_path)
-
-    GH_USERNAME = os.getenv("GH_USERNAME")
-    REPO_NAME ='teaching_git'
-
-    print(f"DEBUG: Buscando .env en {dotenv_path.absolute()}")
-    print(f"DEBUG: Valor encontrado: {GH_USERNAME}")
-    return GH_USERNAME, REPO_NAME
-
-
-@app.cell
-def _(GH_USERNAME, REPO_NAME, git, show):
-    def create_remote_repo(GH_USERNAME, show):
-        # Verificamos si 'origin' ya existe en la configuración de remotos
-        check_remote = git("git remote")
-    
-        if "origin" not in check_remote:
-            # Si no existe, lo añadimos por primera vez
-            show(cmd=f"git remote add origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
-            print("Configurado 'origin' por primera vez.")
-        else:
-            # Si ya existe, simplemente actualizamos la URL (por si cambió)
-            show(cmd=f"git remote set-url origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
-            print("'origin' ya existía, URL actualizada correctamente.")
-    
-        return
-
-    create_remote_repo(GH_USERNAME, show)
-    return
-
-
-@app.cell
-def _(show):
-    # Finalmente, confirmamos el estado final
-    show(cmd="git remote -v")
-    return
+    return Path, REPO, git, mo, os, show, subprocess
 
 
 @app.cell
@@ -118,15 +77,44 @@ def _(mo):
     Este notebook crea un repositorio Git **real** desde cero y ejecuta cada
     comando en tu máquina. Sigue las secciones en orden.
 
+    ### Antes de empezar, necesitas:
+    - **`gh` CLI** instalado y autenticado → `gh auth login`
+    - Un fichero **`.env`** en la misma carpeta que este notebook con:
+
+    ```
+    GH_USERNAME=tu_usuario_de_github
+    ```
+
     ---
     """)
     return
 
 
 @app.cell
+def _(Path, os):
+    from dotenv import load_dotenv
+
+    dotenv_path = Path(__file__).parent.resolve() / ".env"
+    load_dotenv(dotenv_path=dotenv_path)
+
+    GH_USERNAME = os.getenv("GH_USERNAME")
+    REPO_NAME = "teaching_git_test_6"
+
+    assert GH_USERNAME, (
+        f"❌ No se encontró GH_USERNAME en {dotenv_path}. "
+        "Crea el fichero .env con GH_USERNAME=tu_usuario"
+    )
+
+    print(f"✅ GitHub user: {GH_USERNAME}")
+    print(f"✅ Repo name  : {REPO_NAME}")
+    return GH_USERNAME, REPO_NAME
+
+
+@app.cell
 def _(mo):
     mo.md("""
-    ## 1 · Crear el repositorio
+    ---
+    ## 1 · Crear el repositorio local
 
     `git init` convierte una carpeta normal en un repositorio Git.
     Crea una carpeta oculta `.git/` que guarda todo el historial.
@@ -141,10 +129,65 @@ def _(show):
 
 
 @app.cell
+def _(show):
+    show("git branch -M main")
+    return
+
+
+@app.cell
 def _(mo):
     mo.md("""
     ---
-    ## 2 · Primer commit
+    ## 2 · Crear el repositorio remoto en GitHub
+
+    Usamos la **GitHub CLI (`gh`)** para crear el repo directamente desde
+    la terminal sin salir del notebook.
+    """)
+    return
+
+
+@app.cell
+def _(GH_USERNAME, REPO_NAME, git, mo, os, subprocess):
+    # Comprobamos si el repo ya existe en GitHub para ser idempotente
+    check = git(f"gh repo view {GH_USERNAME}/{REPO_NAME} --json name -q .name")
+
+    if check.strip() == REPO_NAME:
+        result_create = f"ℹ️  El repo '{REPO_NAME}' ya existe en GitHub — no se vuelve a crear."
+    else:
+        # Lista de argumentos: evita problemas de quoting en Windows
+        r = subprocess.run(
+            ["gh", "repo", "create", REPO_NAME, "--public",
+             "--description", "Repo del tutorial de Git"],
+            capture_output=True, text=True, env=os.environ.copy()
+        )
+        out = (r.stdout + r.stderr).strip()
+        result_create = out if out else f"✅ Repo '{REPO_NAME}' creado en GitHub."
+
+    mo.md(f"```\n{result_create}\n```")
+    return
+
+
+@app.cell
+def _(GH_USERNAME, REPO_NAME, git, mo):
+    # Vinculamos el remote 'origin' (idempotente)
+    existing_remote = git("git remote")
+
+    if "origin" in existing_remote.splitlines():
+        git(f"git remote set-url origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
+        msg_remote = "ℹ️  'origin' ya existía — URL actualizada."
+    else:
+        git(f"git remote add origin https://github.com/{GH_USERNAME}/{REPO_NAME}.git")
+        msg_remote = "✅ Remote 'origin' añadido."
+
+    mo.md(f"```\n{msg_remote}\n$ git remote -v\n{git('git remote -v')}\n```")
+    return (msg_remote,)
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ---
+    ## 3 · Primer commit
 
     El ciclo básico de Git tiene tres pasos:
 
@@ -160,22 +203,10 @@ def _(mo):
 @app.cell
 def _(REPO: "Path", show):
     (REPO / "README.md").write_text("# Mi Proyecto\n\nProyecto de ejemplo del curso.\n")
-    (REPO / "main.py").write_text('def main():\n    print("Hello from git-tutorial for Digitech!")\n\nif __name__ == "__main__":\n\t    main()')
-
-    show("dir")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    Git aún no los rastrea. Comprobamos el estado:
-    """)
-    return
-
-
-@app.cell
-def _(show):
+    (REPO / "main.py").write_text(
+        'def main():\n    print("Hello from git-tutorial for Digitech!")\n\n'
+        'if __name__ == "__main__":\n    main()\n'
+    )
     show("git status")
     return
 
@@ -183,8 +214,7 @@ def _(show):
 @app.cell
 def _(mo):
     mo.md("""
-    Los ficheros aparecen en rojo como **Untracked**. Los añadimos al
-    *staging area* con `git add`:
+    Git aún no los rastrea. Los añadimos al *staging area* con `git add`:
     """)
     return
 
@@ -205,7 +235,6 @@ def _(show):
 def _(mo):
     mo.md("""
     Ahora aparecen en verde: están **staged**, listos para el commit.
-    Guardamos el snapshot:
     """)
     return
 
@@ -226,7 +255,7 @@ def _(show):
 def _(mo):
     mo.md("""
     ---
-    ## 3 · Construir historial
+    ## 4 · Construir historial
 
     Añadimos más ficheros para tener un historial con el que practicar.
     """)
@@ -236,14 +265,14 @@ def _(mo):
 @app.cell
 def _(REPO: "Path", show):
     (REPO / "requirements.txt").write_text("fastapi>=0.100\nuvicorn\nhttpx\n")
-    show("git add requirements.txt && git commit -m \"chore: add requirements.txt\"")
+    show('git add requirements.txt && git commit -m "chore: add requirements.txt"')
     return
 
 
 @app.cell
 def _(REPO: "Path", show):
     (REPO / ".gitignore").write_text("__pycache__/\n*.pyc\n.venv/\n.env\n")
-    show("git add .gitignore && git commit -m \"chore: add .gitignore\"'")
+    show('git add .gitignore && git commit -m "chore: add .gitignore"')
     return
 
 
@@ -253,7 +282,7 @@ def _(REPO: "Path", show):
         "from fastapi import FastAPI\n\napp = FastAPI()\n\n"
         "@app.get('/')\ndef root():\n    return {'message': 'Hola mundo!'}\n"
     )
-    show("git add main.py && git commit -m \"feat: migrate app to FastAPI\"")
+    show('git add main.py && git commit -m "feat: migrate app to FastAPI"')
     return
 
 
@@ -276,7 +305,7 @@ def _(mo):
 def _(mo):
     mo.md("""
     ---
-    ## 4 · Explorar el historial
+    ## 5 · Explorar el historial
 
     `git log` tiene muchas opciones útiles:
     """)
@@ -312,7 +341,7 @@ def _(show):
 @app.cell
 def _(mo):
     mo.md("""
-    Las líneas en **`-`** son las que se eliminaron y las de **`+`** las añadidas.
+    Las líneas en **`-`** son las eliminadas y las de **`+`** las añadidas.
     """)
     return
 
@@ -321,7 +350,7 @@ def _(mo):
 def _(mo):
     mo.md("""
     ---
-    ## 5 · Ramas — `git branch` · `git checkout`
+    ## 6 · Ramas — `git branch` · `git checkout`
 
     Una rama es un puntero a un commit. Trabajar en ramas mantiene `main`
     estable mientras desarrollas nuevas funcionalidades.
@@ -332,7 +361,7 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.mermaid("""
-    %%{init: { 'theme': 'base', 'themeVariables': { 'primaryColor': '#fff', 'edgeLabelBackground':'#ffffff', 'tertiaryColor': '#fff'}}}%%
+    %%{init: { 'theme': 'base' }}%%
     gitGraph
         commit id: "A"
         commit id: "B"
@@ -358,7 +387,7 @@ def _(REPO: "Path", show):
         "from app import app\nfrom datetime import datetime\n\n"
         "@app.get('/health')\ndef health():\n    return {'status': 'ok', 'time': str(datetime.now())}\n"
     )
-    show("git add health.py && git commit -m 'feat: add /health endpoint'")
+    show('git add health.py && git commit -m "feat: add /health endpoint"')
     return
 
 
@@ -368,8 +397,7 @@ def _(REPO: "Path", show):
         "from app import app\nfrom datetime import datetime\n\n"
         "@app.get('/health')\ndef health():\n    return {'status': 'ok', 'version': '1.0.0', 'time': str(datetime.now())}\n"
     )
-    show("git add health.py && git commit -m 'feat: add version to health response'")
-    ## Por qué falla???
+    show('git add health.py && git commit -m "feat: add version to health response"')
     return
 
 
@@ -389,7 +417,7 @@ def _(mo):
 
 @app.cell
 def _(show):
-    show("git checkout main && dir")
+    show("git checkout main")
     return
 
 
@@ -403,72 +431,65 @@ def _(show):
 def _(mo):
     mo.md("""
     ---
-    ## 6 · Coger la rama de un compañero
+    ## 7 · Coger la rama de un compañero
 
-    Simulamos que existe un **origin** remoto y que un compañero ha subido
-    su rama. Nosotros la descargamos y continuamos su trabajo.
+    Simulamos que un **compañero** ha subido su rama al remoto.
+    Nosotros la descargamos y continuamos su trabajo.
     """)
     return
 
 
 @app.cell
-def _(REPO: "Path", git, show):
-    # Crear origin bare y clonar como "compañero B"
-    origin = REPO.parent / "origin.git"
-    alumno_b = REPO.parent / "alumno-b"
-    git(f"git clone --bare {REPO} {origin}", cwd=REPO.parent)
-    git(f"git clone {origin} {alumno_b}", cwd=REPO.parent)
-    git("git config user.name 'Compañero B'", cwd=alumno_b)
-    git("git config user.email 'b@curso.es'", cwd=alumno_b)
-
-    # El compañero B crea su rama y la sube
-    git("git checkout -b feature/login", cwd=alumno_b)
-    (alumno_b / "login.py").write_text(
-        "from app import app\n\n"
-        "@app.post('/login')\ndef login(username: str, password: str):\n"
-        "    if username == 'admin' and password == '1234':\n"
-        "        return {'token': 'abc123'}\n"
-        "    return {'error': 'invalid credentials'}\n"
-    )
-    git("git add login.py", cwd=alumno_b)
-    git("git commit -m 'feat: add /login endpoint'", cwd=alumno_b)
-    git("git push origin feature/login", cwd=alumno_b)
-
-    # Nosotros conectamos nuestro repo al origin
-    git(f"git remote add origin {origin}", cwd=REPO)
-    show("git remote -v")
-    return
-
-
-@app.cell
 def _(mo):
-
     mo.mermaid("""
     graph TD
         subgraph "Tu Computadora (Local)"
             LocalBranch[Rama feature_1]
             StagingArea[Staging Area / Index]
         end
-
         subgraph "Servidor Central (Remote: origin)"
             RemoteMain[origin/main]
-            RemoteStaging[origin/staging]
             RemoteFeature[origin/feature_1]
         end
-
         LocalBranch -- "git add" --> StagingArea
         StagingArea -- "git commit" --> LocalBranch
         LocalBranch -. "git push" .-> RemoteFeature
-
-        %% Relación de remotes
-        Remotes[Remotes: Lista de servidores] --> origin
     """)
     return
 
 
 @app.cell
+def _(REPO: "Path", git, mo):
+    # Simulamos al compañero B usando un clon bare local
+    origin_path = REPO.parent / "origin.git"
+    alumno_b_path = REPO.parent / "alumno-b"
+
+    git(f"git clone --bare {REPO} {origin_path}", cwd=REPO.parent)
+    git(f"git clone {origin_path} {alumno_b_path}", cwd=REPO.parent)
+    git("git config user.name Companero-B", cwd=alumno_b_path)
+    git("git config user.email b@curso.es", cwd=alumno_b_path)
+    git("git checkout -b feature/login", cwd=alumno_b_path)
+    (alumno_b_path / "login.py").write_text(
+        "from app import app\n\n"
+        "@app.post('/login')\ndef login(username: str, password: str):\n"
+        "    if username == 'admin' and password == '1234':\n"
+        "        return {'token': 'abc123'}\n"
+        "    return {'error': 'invalid credentials'}\n"
+    )
+    git("git add login.py", cwd=alumno_b_path)
+    git('git commit -m "feat: add /login endpoint"', cwd=alumno_b_path)
+    git("git push origin feature/login", cwd=alumno_b_path)
+
+    # Añadimos el bare como remote "local-origin" para no pisar el GitHub origin
+    git(f"git remote add local-origin {origin_path}")
+    msg_b = "✅ Compañero B creado y rama feature/login subida al origin local."
+    mo.md(f"```\n{msg_b}\n```")
+    return
+
+
+@app.cell
 def _(show):
-    show("git fetch origin")
+    show("git fetch local-origin")
     return
 
 
@@ -481,15 +502,14 @@ def _(show):
 @app.cell
 def _(mo):
     mo.md("""
-    La rama del compañero está en `origin/feature/login`. La creamos
-    localmente vinculada al remoto:
+    La rama del compañero está en `local-origin/feature/login`. La creamos localmente:
     """)
     return
 
 
 @app.cell
 def _(show):
-    show("git checkout -b feature/login origin/feature/login")
+    show("git checkout -b feature/login local-origin/feature/login")
     return
 
 
@@ -519,7 +539,7 @@ def _(show):
 def _(mo):
     mo.md("""
     ---
-    ## 7 · Fusionar ramas — `git merge`
+    ## 8 · Fusionar ramas — `git merge`
 
     Integramos `feature/health-endpoint` en `main`. El flag `--no-ff` crea
     un commit de merge explícito aunque sea posible el fast-forward.
@@ -529,7 +549,7 @@ def _(mo):
 
 @app.cell
 def _(show):
-    show("git merge feature/health-endpoint --no-ff -m 'merge: integrate health endpoint'")
+    show('git merge feature/health-endpoint --no-ff -m "merge: integrate health endpoint"')
     return
 
 
@@ -540,16 +560,10 @@ def _(show):
 
 
 @app.cell
-def _(show):
-    show("dir")
-    return
-
-
-@app.cell
 def _(mo):
     mo.md("""
     ---
-    ## 8 · Deshacer commits locales — `git reset`
+    ## 9 · Deshacer commits locales — `git reset`
 
     `reset` mueve el puntero `HEAD` hacia atrás. Tiene tres modos:
 
@@ -567,7 +581,7 @@ def _(mo):
 @app.cell
 def _(REPO: "Path", show):
     (REPO / "error.py").write_text("raise RuntimeError('oops')\n")
-    show("git add error.py && git commit -m \"feat: this is a mistake\"")
+    show('git add error.py && git commit -m "feat: this is a mistake"')
     return
 
 
@@ -608,13 +622,13 @@ def _(mo):
 
 @app.cell
 def _(show):
-    show("git commit -m \"feat: mistake restored for demo'\"")
+    show('git commit -m "feat: mistake restored for demo"')
     return
 
 
 @app.cell
 def _(show):
-    show(cmd="git log --oneline")
+    show("git log --oneline")
     return
 
 
@@ -635,7 +649,7 @@ def _(show):
 
 @app.cell
 def _(show):
-    show("git log --oneline && ls")
+    show("git log --oneline")
     return
 
 
@@ -643,7 +657,7 @@ def _(show):
 def _(mo):
     mo.md("""
     ---
-    ## 9 · Deshacer commits publicados — `git revert`
+    ## 10 · Deshacer commits publicados — `git revert`
 
     `revert` **no reescribe** el historial: crea un nuevo commit que invierte
     los cambios. Es seguro usarlo en commits que ya están en `origin`.
@@ -656,8 +670,10 @@ def _(mo):
 @app.cell
 def _(REPO: "Path", show):
     content = (REPO / "main.py").read_text()
-    (REPO / "main.py").write_text(content + "\n# BUG: rompe producción\nraise RuntimeError('critical error')\n")
-    show("git add main.py && git commit -m \"fix: hotfix (introduced bug by mistake)\"")
+    (REPO / "main.py").write_text(
+        content + "\n# BUG: rompe producción\nraise RuntimeError('critical error')\n"
+    )
+    show('git add main.py && git commit -m "fix: hotfix (introduced bug by mistake)"')
     return
 
 
@@ -704,9 +720,9 @@ def _(mo):
 def _(mo):
     mo.md("""
     ---
-    ## 10 · Push a producción vía Pull Request
+    ## 11 · Push a producción vía Pull Request
 
-    El flujo profesional nunca hace push directamente a `main`. En su lugar:
+    El flujo profesional **nunca hace push directamente a `main`**. En su lugar:
 
     ```
     1. git checkout -b feature/mi-cambio
@@ -714,11 +730,9 @@ def _(mo):
     3. git push origin feature/mi-cambio
     4. Abrir Pull Request en GitHub
     5. Code review + aprobación
-    6. Merge a main desde GitHub
+    6. ✅ Tú haces el merge en GitHub
     7. git pull origin main
     ```
-
-    Preparamos la rama final con la documentación:
     """)
     return
 
@@ -740,43 +754,94 @@ def _(REPO: "Path", show):
         "## Instalación\n\n"
         "```bash\nuv sync\nuvicorn app:app --reload\n```\n"
     )
-    show("git add DOCS.md && git commit -m \"docs: add API documentation\"")
+    show('git add DOCS.md && git commit -m "docs: add API documentation"')
     return
 
 
 @app.cell
-def _(show):
-    show("git push origin feature/add-docs")
+def _(git, mo, msg_remote):
+    # msg_remote is consumed only to force marimo to run section 2 (remote setup) first.
+    _ = msg_remote
+    # Subimos main (base) y la rama en orden garantizado antes de crear la PR.
+    # Ambos en la misma celda para que el DAG de marimo los secuencie correctamente.
+    out_main   = git("git push origin main --force-with-lease")
+    out_branch = git("git push origin feature/add-docs")
+    mo.md(
+        f"```\n$ git push origin main\n{out_main}\n\n"
+        f"$ git push origin feature/add-docs\n{out_branch}\n```"
+    )
+    return
+
+
+@app.cell
+def _(GH_USERNAME, REPO: "Path", REPO_NAME, mo, os, subprocess):
+    # Lista de argumentos: evita problemas de quoting en Windows
+    r_pr = subprocess.run(
+        [
+            "gh", "pr", "create",
+            "--repo",  f"{GH_USERNAME}/{REPO_NAME}",
+            "--base",  "main",
+            "--head",  "feature/add-docs",
+            "--title", "docs: add API documentation",
+            "--body",  "Añade DOCS.md con la descripción de los endpoints y las instrucciones de instalación.",
+        ],
+        capture_output=True, text=True,
+        cwd=str(REPO), env=os.environ.copy()
+    )
+    pr_out = (r_pr.stdout + r_pr.stderr).strip()
+    mo.md(f"```\n{pr_out}\n```")
     return
 
 
 @app.cell
 def _(mo):
     mo.md("""
-    En este punto, en **GitHub**:
-    **"Compare & pull request"**. Abres el PR, describes el cambio,
-    asignas revisores, y esperás la aprobación.
+    ### 🎯 Tu turno — Debes hacer el merge tú mismo
 
-    Simulamos el merge del PR (en GitHub es un click):
+    1. Abre la URL de la PR que aparece arriba en tu navegador
+    2. Revisa los cambios en la pestaña **"Files changed"**
+    3. Pulsa **"Merge pull request"** → **"Confirm merge"**
+    4. Una vez mergeada, vuelve aquí y ejecuta la siguiente celda
+    """)
+    return
+
+
+@app.cell
+def _(GH_USERNAME, REPO_NAME, mo, os, subprocess):
+    # Lista de argumentos: evita quoting de '.[0].number' en Windows cmd.exe
+    r_check = subprocess.run(
+        [
+            "gh", "pr", "list",
+            "--repo",  f"{GH_USERNAME}/{REPO_NAME}",
+            "--head",  "feature/add-docs",
+            "--state", "merged",
+            "--json",  "number",
+            "-q",      ".[0].number",
+        ],
+        capture_output=True, text=True, env=os.environ.copy()
+    )
+    pr_state = (r_check.stdout + r_check.stderr).strip()
+
+    if pr_state:
+        status_msg = f"✅ PR #{pr_state} mergeada correctamente. ¡Bien hecho!"
+    else:
+        status_msg = "⏳ La PR todavía no está mergeada. Hazlo en GitHub y vuelve a ejecutar esta celda."
+
+    mo.md(f"> {status_msg}")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    Sincronizamos nuestro `main` local con el merge que acabas de hacer en GitHub:
     """)
     return
 
 
 @app.cell
 def _(show):
-    show("git checkout main")
-    return
-
-
-@app.cell
-def _(show):
-    show('git merge feature/add-docs --no-ff -m "Merge pull request #1: docs: add API documentation"')
-    return
-
-
-@app.cell
-def _(show):
-    show("git push origin main")
+    show("git checkout main && git pull origin main")
     return
 
 
@@ -792,7 +857,7 @@ def _(mo):
     ---
     ## ✅ Resumen
 
-    Has completado el flujo completo de Git:
+    Has completado el flujo completo de Git + GitHub:
 
     | Comando | Para qué sirve |
     |---------|---------------|
@@ -806,6 +871,8 @@ def _(mo):
     | `git push` | Subir cambios al remote |
     | `git reset --soft/--hard` | Deshacer commits locales |
     | `git revert` | Deshacer commits publicados |
+    | `gh repo create` | Crear repo en GitHub desde CLI |
+    | `gh pr create` | Abrir una Pull Request desde CLI |
 
     ### Flujo del día a día
 
@@ -816,7 +883,7 @@ def _(mo):
     git add .
     git commit -m "feat: ..."
     git push origin feature/xxx   # sube la rama
-    # abre PR en GitHub → review → merge
+    # abre PR en GitHub → review → merge (tú o tu equipo)
     git checkout main
     git pull origin main          # sincroniza el merge
     ```
