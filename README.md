@@ -67,6 +67,8 @@ uv venv .venv
 .venv\Scripts\activate
 ```
 
+Te saldrá un popu abajo a la derecha si usas VSC, dale a Sí. Esto asegura que el intérprete del .venv
+
 ---
 
 ## 6 · Lanzar el notebook
