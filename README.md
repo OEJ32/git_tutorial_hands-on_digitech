@@ -40,8 +40,9 @@ cd git_tutorial
 
 ```bash
 gh repo clone OEJ32/hands-on_git_tutorial
-
 ```
+
+Después, abrimos en VSC la nueva carpeta creada (Ctr+K Ctrl+O)
 
 Quitamos el repositorio original para después apuntar a nuestro repo 
 ```bash
