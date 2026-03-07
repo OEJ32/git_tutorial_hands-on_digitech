@@ -71,11 +71,13 @@ GH_USERNAME=tu_usuario_de_github
 ## 5 · Crear el entorno virtual e instalar dependencias
 
 ```bash
-uv init
+-- NO ES NECESARIO, ESTÁ YA EL pyproject.toml (si no, sería necesario) -- uv init
+uv sync 
 uv venv .venv
 .venv\Scripts\activate
-uv add marimo python-dotenv pyzmq
 ```
+
+Te saldrá un popu abajo a la derecha si usas VSC, dale a Sí. Esto asegura que el intérprete del .venv
 
 ---
 
@@ -85,13 +87,15 @@ uv add marimo python-dotenv pyzmq
 marimo run git_tutorial.py
 ```
 
-O instala la extensión, y después abre el notebook con el icono verde al lado del botón de "Play" arriba a la derecha en VSC
-
 O en modo edición si quieres ver el código:
 
 ```bash
 marimo edit git_tutorial.py
 ```
+
+O instala la extensión, y después abre el notebook con el icono verde al lado del botón de "Play" arriba a la derecha en VSC
+<img width="1920" height="1008" alt="image" src="https://github.com/user-attachments/assets/57f5c3ac-d99e-45a7-b441-b8ee169dc504" />
+
 
 ---
 
