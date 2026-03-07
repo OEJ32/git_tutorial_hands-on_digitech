@@ -61,7 +61,8 @@ GH_USERNAME=tu_usuario_de_github
 ## 5 · Crear el entorno virtual e instalar dependencias
 
 ```bash
-uv init
+-- NO ES NECESARIO, ESTÁ YA EL pyproject.toml (si no, sería necesario) -- uv init
+uv sync 
 uv venv .venv
 .venv\Scripts\activate
 uv add marimo python-dotenv pyzmq
