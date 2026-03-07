@@ -98,7 +98,7 @@ def _(Path, os):
     load_dotenv(dotenv_path=dotenv_path)
 
     GH_USERNAME = os.getenv("GH_USERNAME")
-    REPO_NAME = "teaching_git_test_6"
+    REPO_NAME = "git_tutorial_hands-on"
 
     assert GH_USERNAME, (
         f"❌ No se encontró GH_USERNAME en {dotenv_path}. "
