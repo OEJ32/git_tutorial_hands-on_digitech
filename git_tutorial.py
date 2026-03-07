@@ -130,6 +130,13 @@ def _(show):
 
 @app.cell
 def _(show):
+    # Se debería haber ejecutado antes, pero por si acaso, aseguramos que no hay un remoto "origin" configurado
+    show("git remote remove origin")
+    return
+
+
+@app.cell
+def _(show):
     show("git branch -M main")
     return
 
