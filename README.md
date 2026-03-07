@@ -76,6 +76,9 @@ uv add marimo python-dotenv pyzmq
 marimo run git_tutorial.py
 ```
 
+<img width="1920" height="1008" alt="image" src="https://github.com/user-attachments/assets/25627e77-8c93-467f-9d88-d99aac8e762a" />
+
+
 O instala la extensión, y después abre el notebook con el icono verde al lado del botón de "Play" arriba a la derecha en VSC
 
 O en modo edición si quieres ver el código:
