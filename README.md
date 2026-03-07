@@ -31,11 +31,21 @@ gh auth status
 
 ---
 
-## 2 · Crear la carpeta de trabajo
+## 2 · Crear la carpeta de trabajo & clona el repo
 
 ```bash
 mkdir git_tutorial
 cd git_tutorial
+```
+
+```bash
+gh repo clone OEJ32/hands-on_git_tutorial
+
+```
+
+Quitamos el repositorio original para después apuntar a nuestro repo 
+```bash
+git remote remove origin
 ```
 
 ---
