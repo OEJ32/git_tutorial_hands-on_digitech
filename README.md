@@ -78,7 +78,8 @@ uv venv .venv
 .venv\Scripts\activate
 ```
 
-Te saldrá un popu abajo a la derecha si usas VSC, dale a Sí. Esto asegura que el intérprete del .venv
+Te saldrá un popu abajo a la derecha si usas VSC, dale a <Sí>. Esto asegura que el intérprete del .venv
+<img width="1920" height="1008" alt="image" src="https://github.com/user-attachments/assets/62188124-56de-4915-8310-b3e910335460" />
 
 ---
 
